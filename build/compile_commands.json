@@ -1,0 +1,20 @@
+[
+{
+  "directory": "/mnt/c/MAMP/htdocs/graphic/build",
+  "command": "/usr/bin/g++  -I/mnt/c/MAMP/htdocs/graphic/external/glad/include -I/mnt/c/MAMP/htdocs/graphic/external/stb -g -std=gnu++17 -o CMakeFiles/main.dir/main.cpp.o -c /mnt/c/MAMP/htdocs/graphic/main.cpp",
+  "file": "/mnt/c/MAMP/htdocs/graphic/main.cpp",
+  "output": "CMakeFiles/main.dir/main.cpp.o"
+},
+{
+  "directory": "/mnt/c/MAMP/htdocs/graphic/build",
+  "command": "/usr/bin/g++  -I/mnt/c/MAMP/htdocs/graphic/external/glad/include -I/mnt/c/MAMP/htdocs/graphic/external/stb -g -std=gnu++17 -o CMakeFiles/main.dir/shader.cpp.o -c /mnt/c/MAMP/htdocs/graphic/shader.cpp",
+  "file": "/mnt/c/MAMP/htdocs/graphic/shader.cpp",
+  "output": "CMakeFiles/main.dir/shader.cpp.o"
+},
+{
+  "directory": "/mnt/c/MAMP/htdocs/graphic/build",
+  "command": "/usr/bin/gcc  -I/mnt/c/MAMP/htdocs/graphic/external/glad/include -I/mnt/c/MAMP/htdocs/graphic/external/stb -g -o CMakeFiles/main.dir/external/glad/src/gl.c.o -c /mnt/c/MAMP/htdocs/graphic/external/glad/src/gl.c",
+  "file": "/mnt/c/MAMP/htdocs/graphic/external/glad/src/gl.c",
+  "output": "CMakeFiles/main.dir/external/glad/src/gl.c.o"
+}
+]
