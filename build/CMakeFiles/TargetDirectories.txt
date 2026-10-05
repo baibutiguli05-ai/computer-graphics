@@ -1,3 +1,0 @@
-/mnt/c/MAMP/htdocs/graphic/build/CMakeFiles/main.dir
-/mnt/c/MAMP/htdocs/graphic/build/CMakeFiles/edit_cache.dir
-/mnt/c/MAMP/htdocs/graphic/build/CMakeFiles/rebuild_cache.dir

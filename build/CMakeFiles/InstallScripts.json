@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/mnt/c/MAMP/htdocs/graphic/build/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
