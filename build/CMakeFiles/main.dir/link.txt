@@ -1,1 +1,1 @@
-/usr/bin/g++ -g -Wl,--dependency-file=CMakeFiles/main.dir/link.d CMakeFiles/main.dir/main.cpp.o CMakeFiles/main.dir/shader.cpp.o CMakeFiles/main.dir/external/glad/src/gl.c.o -o main  -lglfw /usr/lib/x86_64-linux-gnu/libGL.so -ldl -lpthread
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/main.dir/link.d CMakeFiles/main.dir/main.cpp.o CMakeFiles/main.dir/external/glad/src/gl.c.o -o main  -lglfw /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libGLX.so -ldl -lpthread

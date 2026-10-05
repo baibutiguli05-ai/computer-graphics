@@ -10,7 +10,6 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/mnt/c/MAMP/htdocs/graphic/external/glad/src/gl.c" "CMakeFiles/main.dir/external/glad/src/gl.c.o" "gcc" "CMakeFiles/main.dir/external/glad/src/gl.c.o.d"
   "/mnt/c/MAMP/htdocs/graphic/main.cpp" "CMakeFiles/main.dir/main.cpp.o" "gcc" "CMakeFiles/main.dir/main.cpp.o.d"
-  "/mnt/c/MAMP/htdocs/graphic/shader.cpp" "CMakeFiles/main.dir/shader.cpp.o" "gcc" "CMakeFiles/main.dir/shader.cpp.o.d"
   "" "main" "gcc" "CMakeFiles/main.dir/link.d"
   )
 

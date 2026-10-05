@@ -3,10 +3,10 @@ main: \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/crti.o \
   /usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o \
   CMakeFiles/main.dir/main.cpp.o \
-  CMakeFiles/main.dir/shader.cpp.o \
   CMakeFiles/main.dir/external/glad/src/gl.c.o \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libglfw.so \
-  /usr/lib/x86_64-linux-gnu/libGL.so \
+  /usr/lib/x86_64-linux-gnu/libOpenGL.so \
+  /usr/lib/x86_64-linux-gnu/libGLX.so \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libdl.a \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libpthread.a \
   /usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so \
@@ -35,7 +35,8 @@ main: \
   /usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a \
   /usr/lib/gcc/x86_64-linux-gnu/15/crtendS.o \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/crtn.o \
-  /lib64/ld-linux-x86-64.so.2
+  /lib64/ld-linux-x86-64.so.2 \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libgcc_s.so.1
 
 /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/Scrt1.o:
 
@@ -45,13 +46,13 @@ main: \
 
 CMakeFiles/main.dir/main.cpp.o:
 
-CMakeFiles/main.dir/shader.cpp.o:
-
 CMakeFiles/main.dir/external/glad/src/gl.c.o:
 
 /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libglfw.so:
 
-/usr/lib/x86_64-linux-gnu/libGL.so:
+/usr/lib/x86_64-linux-gnu/libOpenGL.so:
+
+/usr/lib/x86_64-linux-gnu/libGLX.so:
 
 /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libdl.a:
 
@@ -110,3 +111,5 @@ CMakeFiles/main.dir/external/glad/src/gl.c.o:
 /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/crtn.o:
 
 /lib64/ld-linux-x86-64.so.2:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libgcc_s.so.1:

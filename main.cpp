@@ -3,7 +3,6 @@
 
 #include <cmath>
 #include <iostream>
-#include <vector>
 
 const int WIDTH  = 800;
 const int HEIGHT = 600;
