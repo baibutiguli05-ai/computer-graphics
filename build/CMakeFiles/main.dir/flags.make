@@ -7,11 +7,11 @@ C_DEFINES =
 
 C_INCLUDES = -I/mnt/c/MAMP/htdocs/graphic/external/glad/include -I/mnt/c/MAMP/htdocs/graphic/external/stb
 
-C_FLAGS = 
+C_FLAGS = -g
 
 CXX_DEFINES = 
 
 CXX_INCLUDES = -I/mnt/c/MAMP/htdocs/graphic/external/glad/include -I/mnt/c/MAMP/htdocs/graphic/external/stb
 
-CXX_FLAGS = -std=gnu++17
+CXX_FLAGS = -g -std=gnu++17
 
