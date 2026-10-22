@@ -1,338 +1,258 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <cmath>
-#include <iostream>
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 
-const int WIDTH  = 800;
-const int HEIGHT = 600;
+const float W = 800, H = 450, GROUND = 370, PX = 170, PI = 3.14159265f;
+const float GRAVITY = 2600, JUMP_V = 760, JUMP2_V = 640, BAR_BOTTOM = GROUND - 58;
+const float THIGH = 24, SHIN = 24, TORSO = 34, HEAD = 11, UPPER_ARM = 18, FOREARM = 17, LIMB_W = 5;
 
-bool isWhiteBackground = false;
-float speed = 1.0f;
-float aspect = (float)WIDTH / (float)HEIGHT;
+enum { BOX, BAR, GAP };
+struct Obstacle { int type; float x, w, h; };
+struct Pose { float hipDrop, lean, legs[2][2], arms[2][2]; };
 
-const float GROUND_Y   = -0.8f;
-const float GRAVITY    = 4.0f;
-const float JUMP_SPEED = 2.6f;
-const float BOUNCE_T   = 2.0f * JUMP_SPEED / GRAVITY;
+std::vector<Obstacle> obs;
+float py, pvy, speed, dist, nextGap, phase;
+int jumps, best, uRect, uAngle, uKind, uColor;
+bool grounded, fall, slide, dead;
 
-const float BALL_R      = 0.12f;
-const float BALL_X      = 0.0f;
-const float SQUARE_HALF = 0.08f;
+float rnd() { return rand() / (float)RAND_MAX; }
 
-const int CIRCLE_SEGMENTS = 48;
-
-const char* vertexSrc = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec3 aColor;
-
-uniform vec2 uOffset;
-uniform float uScale;
-uniform float uAspect;
-uniform vec3 uTint;
-
-out vec3 vColor;
-
-void main() {
-    vec2 p = aPos.xy * uScale + uOffset;
-    gl_Position = vec4(p.x / uAspect, p.y, aPos.z, 1.0);
-    vColor = aColor * uTint;
+void draw(int kind, float x, float y, float w, float h, float ang, float r, float g, float b) {
+    glUniform4f(uRect, x, y, w, h);
+    glUniform1f(uAngle, ang);
+    glUniform1i(uKind, kind);
+    glUniform3f(uColor, r, g, b);
+    if (kind == 2) glDrawArrays(GL_TRIANGLE_FAN, 0, 34);
+    else           glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
-)";
+void rect(float x, float y, float w, float h, float r, float g, float b) { draw(0, x, y, w, h, 0, r, g, b); }
+void circle(float x, float y, float rad, const float* c) { draw(2, x, y, rad, rad, 0, c[0], c[1], c[2]); }
 
-const char* fragmentSrc = R"(
-#version 330 core
-in vec3 vColor;
-out vec4 FragColor;
-
-void main() {
-    FragColor = vec4(vColor, 1.0);
-}
-)";
-
-unsigned int makeShader(const char* vShaderCode, const char* fShaderCode) {
-    int ok = 0;
-    char infoLog[512];
-
-    unsigned int vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vShaderCode, nullptr);
-    glCompileShader(vs);
-    glGetShaderiv(vs, GL_COMPILE_STATUS, &ok);
-    if (!ok) {
-        glGetShaderInfoLog(vs, 512, nullptr, infoLog);
-        std::cerr << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-
-    unsigned int fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fShaderCode, nullptr);
-    glCompileShader(fs);
-    glGetShaderiv(fs, GL_COMPILE_STATUS, &ok);
-    if (!ok) {
-        glGetShaderInfoLog(fs, 512, nullptr, infoLog);
-        std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-
-    unsigned int program = glCreateProgram();
-    glAttachShader(program, vs);
-    glAttachShader(program, fs);
-    glLinkProgram(program);
-    glGetProgramiv(program, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        glGetProgramInfoLog(program, 512, nullptr, infoLog);
-        std::cerr << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-    }
-
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    return program;
+void limb(float x, float y, float ang, float len, float width, const float* c, float& ex, float& ey) {
+    draw(1, x, y, width, len, -ang, c[0], c[1], c[2]);
+    ex = x + std::sin(ang) * len;
+    ey = y + std::cos(ang) * len;
+    circle(x, y, width * 0.5f, c);
+    circle(ex, ey, width * 0.5f, c);
 }
 
-void onResize(GLFWwindow*, int width, int height) {
-    glViewport(0, 0, width, height);
-    if (height > 0) {
-        aspect = (float)width / (float)height;
-    }
+void reset() {
+    obs.clear();
+    py = pvy = dist = phase = 0; speed = 330; nextGap = 600; jumps = 0;
+    grounded = true; fall = slide = dead = false;
 }
 
-void processInput(GLFWwindow* window, float dt) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, true);
+void jump() {
+    if (dead) { reset(); return; }
+    if (fall) return;
+    if (grounded) { pvy = JUMP_V; grounded = false; jumps = 1; }
+    else if (jumps < 2) { pvy = JUMP2_V; jumps = 2; }
+}
+
+void spawn() {
+    float lvl = std::min(1.0f, dist / 6000), r = rnd();
+    Obstacle o = { BOX, W + 40, 0, 0 };
+    if (r < 0.4f)       { o.w = 28 + rnd() * 26; o.h = 28 + rnd() * (26 + 20 * lvl); }
+    else if (r < 0.72f) { o.type = BAR; o.w = 60 + rnd() * 60; }
+    else                { o.type = GAP; o.w = 60 + rnd() * (40 + 40 * lvl); }
+    obs.push_back(o);
+    nextGap = speed * 2 * JUMP_V / GRAVITY + o.w + 120 + rnd() * 260 * (1.2f - lvl * 0.5f);
+}
+
+bool overGap() {
+    for (const Obstacle& o : obs)
+        if (o.type == GAP && PX - 6 > o.x && PX + 6 < o.x + o.w) return true;
+    return false;
+}
+
+void die() {
+    dead = true;
+    best = std::max(best, (int)(dist / 10));
+}
+
+void update(float dt, bool down) {
+    if (dead) return;
+    speed += 7 * dt;
+    dist += speed * dt;
+    phase += dt * speed / 34;
+    slide = down && grounded;
+
+    if (!grounded) {
+        pvy -= GRAVITY * dt * (down && !fall ? 2.4f : 1.0f);
+        py += pvy * dt;
+        if (!fall && py <= 0) {
+            if (overGap()) fall = true;
+            else { py = pvy = 0; grounded = true; jumps = 0; }
+        }
+        if (py < -140) { die(); return; }
+    } else if (overGap()) {
+        grounded = false; fall = true; pvy = 0;
     }
 
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS ||
-        glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-        glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
-        isWhiteBackground = true;
-    } else {
-        isWhiteBackground = false;
-    }
+    for (Obstacle& o : obs) o.x -= speed * dt;
+    obs.erase(std::remove_if(obs.begin(), obs.end(),
+              [](const Obstacle& o) { return o.x + o.w < -20; }), obs.end());
+    if (obs.empty() || obs.back().x <= W + 40 - nextGap) spawn();
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        speed += 1.0f * dt;
-    }
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        speed -= 1.0f * dt;
-        if (speed < 0.1f) speed = 0.1f;
+    if (fall) return;
+    float bottom = GROUND - py, top = bottom - (slide ? 34 : 96);
+    float left = PX - (slide ? 22 : 10), right = PX + (slide ? 26 : 12);
+    for (const Obstacle& o : obs) {
+        if (!(right > o.x && left < o.x + o.w)) continue;
+        if ((o.type == BOX && bottom > GROUND - o.h) || (o.type == BAR && top < BAR_BOTTOM)) {
+            die();
+            return;
+        }
     }
 }
 
-void makeMesh(const float* vertices, size_t verticesSize,
-              const unsigned int* indices, size_t indicesSize,
-              unsigned int& vao, unsigned int& vbo, unsigned int& ebo) {
-    glGenVertexArrays(1, &vao);
-    glGenBuffers(1, &vbo);
-    glGenBuffers(1, &ebo);
-
-    glBindVertexArray(vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, verticesSize, vertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesSize, indices, GL_STATIC_DRAW);
-
-    const int STRIDE = 6 * sizeof(float);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, STRIDE, (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, STRIDE, (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    glBindVertexArray(0);
+Pose getPose() {
+    float p = phase;
+    if (dead && !fall)
+        return { 0, -0.5f, { { 0.5f, -0.2f }, { -0.4f, -0.9f } }, { { 2.4f, 2.8f }, { -2.2f, -2.6f } } };
+    if (slide)
+        return { 28, -1.3f, { { 1.5f, 1.6f }, { 1.2f, 2.0f } }, { { -0.9f, -0.4f }, { 0.4f, 1.4f } } };
+    if (!grounded) {
+        float flip = jumps == 2 ? pvy / JUMP2_V : 0.0f;
+        return { 0, 0.25f, { { 1.0f, -0.4f }, { -0.2f, -1.4f } }, { { -0.5f + flip * 0.3f, 1.3f }, { 1.6f, 2.6f } } };
+    }
+    float legA = 0.75f * std::sin(p), legB = 0.75f * std::sin(p + PI);
+    float kneeA = legA - (0.25f + 1.25f * std::max(0.0f, std::sin(p + 1.3f)));
+    float kneeB = legB - (0.25f + 1.25f * std::max(0.0f, std::sin(p + PI + 1.3f)));
+    float armA = -0.85f * std::sin(p), armB = -0.85f * std::sin(p + PI);
+    return { 3 * std::fabs(std::cos(p)), 0.2f, { { legA, kneeA }, { legB, kneeB } },
+             { { armA, armA + 1.3f }, { armB, armB + 1.3f } } };
 }
 
-float ballHeight(float t) {
-    float tau = std::fmod(t, BOUNCE_T);
-    return JUMP_SPEED * tau - 0.5f * GRAVITY * tau * tau;
+void drawStickman() {
+    Pose ps = getPose();
+    float hipX = PX;
+    float hipY = GROUND - py - THIGH - SHIN + ps.hipDrop + (slide ? 0.0f : 2.0f);
+    const float bk[3] = { 0.54f, 0.58f, 0.77f }, fr[3] = { 0.95f, 0.96f, 1.0f }, eye[3] = { 0.12f, 0.14f, 0.25f };
+
+    float shX = hipX + std::sin(ps.lean) * (TORSO - 4);
+    float shY = hipY - std::cos(ps.lean) * (TORSO - 4);
+    float ex, ey, kx, ky;
+
+    limb(hipX, hipY, ps.legs[1][0], THIGH, LIMB_W, bk, kx, ky);
+    limb(kx, ky, ps.legs[1][1], SHIN, LIMB_W, bk, ex, ey);
+    limb(shX, shY, ps.arms[1][0], UPPER_ARM, LIMB_W, bk, kx, ky);
+    limb(kx, ky, ps.arms[1][1], FOREARM, LIMB_W, bk, ex, ey);
+
+    float neckX, neckY;
+    limb(hipX, hipY, PI - ps.lean, TORSO, LIMB_W + 1, fr, neckX, neckY);
+    float headX = neckX + std::sin(ps.lean) * (HEAD + 2);
+    float headY = neckY - std::cos(ps.lean) * (HEAD + 2);
+    circle(headX, headY, HEAD, fr);
+    circle(headX + 4 * std::cos(ps.lean), headY - 2 + 4 * std::sin(ps.lean), 2, eye);
+
+    limb(hipX, hipY, ps.legs[0][0], THIGH, LIMB_W, fr, kx, ky);
+    limb(kx, ky, ps.legs[0][1], SHIN, LIMB_W, fr, ex, ey);
+    limb(shX, shY, ps.arms[0][0], UPPER_ARM, LIMB_W, fr, kx, ky);
+    limb(kx, ky, ps.arms[0][1], FOREARM, LIMB_W, fr, ex, ey);
 }
 
-float squareX(float t) {
-    float start = aspect + SQUARE_HALF;
-    float length = 2.0f * start;
-    float phase = std::fmod(t, BOUNCE_T) / BOUNCE_T;
-    return start - length * phase;
-}
-
-bool isTouching(float ballX, float ballY, float sqX, float sqY) {
-    float nx = std::fmax(sqX - SQUARE_HALF, std::fmin(ballX, sqX + SQUARE_HALF));
-    float ny = std::fmax(sqY - SQUARE_HALF, std::fmin(ballY, sqY + SQUARE_HALF));
-    float dx = ballX - nx;
-    float dy = ballY - ny;
-    return dx * dx + dy * dy < BALL_R * BALL_R;
+void drawScene() {
+    rect(0, GROUND, W, H - GROUND, 0.23f, 0.26f, 0.44f);
+    for (const Obstacle& o : obs) {
+        if (o.type == GAP) rect(o.x, GROUND, o.w, H - GROUND, 0.04f, 0.05f, 0.11f);
+        if (o.type == BOX) rect(o.x, GROUND - o.h, o.w, o.h, 0.95f, 0.55f, 0.3f);
+        if (o.type == BAR) {
+            rect(o.x + o.w / 2 - 3, 0, 6, BAR_BOTTOM, 0.36f, 0.4f, 0.6f);
+            rect(o.x, BAR_BOTTOM - 22, o.w, 22, 0.9f, 0.3f, 0.35f);
+        }
+    }
+    if (!(fall && py < -120)) drawStickman();
 }
 
 int main() {
-    if (!glfwInit()) {
-        std::cerr << "GLFW іске қосылмады\n";
-        return -1;
-    }
-
+    glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
-
-    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT,
-                                          "Компьютерлік графика - 6-апта",
-                                          nullptr, nullptr);
-    if (!window) {
-        std::cerr << "Терезе жасалмады.\n";
-        glfwTerminate();
-        return -1;
-    }
-
+    GLFWwindow* window = glfwCreateWindow(960, 540, "STICK RUN", nullptr, nullptr);
+    if (!window) return -1;
     glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, onResize);
     glfwSwapInterval(1);
+    gladLoadGL(glfwGetProcAddress);
 
-    if (gladLoadGL(glfwGetProcAddress) == 0) {
-        std::cerr << "GLAD жүктелмеді\n";
-        glfwTerminate();
-        return -1;
+    glfwSetKeyCallback(window, [](GLFWwindow* w, int key, int, int action, int) {
+        if (action != GLFW_PRESS) return;
+        if (key == GLFW_KEY_ESCAPE) glfwSetWindowShouldClose(w, true);
+        if (key == GLFW_KEY_SPACE || key == GLFW_KEY_UP || key == GLFW_KEY_W) jump();
+    });
+
+    const char* vs = R"(#version 330 core
+uniform vec4 uRect;
+uniform float uAngle;
+uniform int uKind;
+void main() {
+    vec2 c = vec2(gl_VertexID & 1, gl_VertexID >> 1);
+    if (uKind == 1) c.x -= 0.5;
+    if (uKind == 2) {
+        float a = float(gl_VertexID - 1) * 6.2831853 / 32.0;
+        c = gl_VertexID == 0 ? vec2(0.0) : vec2(cos(a), sin(a));
     }
+    vec2 p = c * uRect.zw;
+    float cs = cos(uAngle), sn = sin(uAngle);
+    p = vec2(p.x * cs - p.y * sn, p.x * sn + p.y * cs) + uRect.xy;
+    gl_Position = vec4(p.x / 400.0 - 1.0, 1.0 - p.y / 225.0, 0.0, 1.0);
+})";
+    const char* fs = R"(#version 330 core
+uniform vec3 uColor;
+out vec4 o;
+void main() { o = vec4(uColor, 1.0); })";
 
-    int fbW, fbH;
-    glfwGetFramebufferSize(window, &fbW, &fbH);
-    onResize(window, fbW, fbH);
+    unsigned int v = glCreateShader(GL_VERTEX_SHADER), f = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(v, 1, &vs, nullptr); glCompileShader(v);
+    glShaderSource(f, 1, &fs, nullptr); glCompileShader(f);
+    unsigned int prog = glCreateProgram();
+    glAttachShader(prog, v); glAttachShader(prog, f); glLinkProgram(prog);
+    glUseProgram(prog);
+    uRect = glGetUniformLocation(prog, "uRect");
+    uAngle = glGetUniformLocation(prog, "uAngle");
+    uKind = glGetUniformLocation(prog, "uKind");
+    uColor = glGetUniformLocation(prog, "uColor");
 
-    std::cout << "OpenGL: " << glGetString(GL_VERSION) << "\n";
-    std::cout << "GPU:    " << glGetString(GL_RENDERER) << "\n";
-    std::cout << "W/S: жылдамдық, Space: ақ фон, Esc: шығу\n";
+    unsigned int vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
 
-    std::vector<float> circleVertices;
-    circleVertices.insert(circleVertices.end(), { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f });
-    for (int i = 0; i < CIRCLE_SEGMENTS; ++i) {
-        float a = 2.0f * 3.14159265f * i / CIRCLE_SEGMENTS;
-        float x = std::cos(a) * BALL_R;
-        float y = std::sin(a) * BALL_R;
-        float r = 0.5f + 0.5f * std::cos(a);
-        float g = 0.5f + 0.5f * std::cos(a + 2.094f);
-        float b = 0.5f + 0.5f * std::cos(a + 4.189f);
-        circleVertices.insert(circleVertices.end(), { x, y, 0.0f, r, g, b });
-    }
-
-    std::vector<unsigned int> circleIndices;
-    for (int i = 1; i <= CIRCLE_SEGMENTS; ++i) {
-        int next = (i % CIRCLE_SEGMENTS) + 1;
-        circleIndices.insert(circleIndices.end(), { 0u, (unsigned int)i, (unsigned int)next });
-    }
-
-    unsigned int circleVao, circleVbo, circleEbo;
-    makeMesh(circleVertices.data(), circleVertices.size() * sizeof(float),
-             circleIndices.data(), circleIndices.size() * sizeof(unsigned int),
-             circleVao, circleVbo, circleEbo);
-
-    float h = SQUARE_HALF;
-    float squareVertices[] = {
-         h,  h, 0.0f,    1.0f, 0.0f, 0.0f,
-         h, -h, 0.0f,    0.0f, 1.0f, 0.0f,
-        -h, -h, 0.0f,    0.0f, 0.0f, 1.0f,
-        -h,  h, 0.0f,    1.0f, 1.0f, 0.0f
-    };
-
-    unsigned int squareIndices[] = {
-        0, 1, 3,
-        1, 2, 3
-    };
-
-    unsigned int squareVao, squareVbo, squareEbo;
-    makeMesh(squareVertices, sizeof(squareVertices), squareIndices, sizeof(squareIndices),
-             squareVao, squareVbo, squareEbo);
-
-    float groundVertices[] = {
-         1.0f,  0.0f, 0.0f,    0.45f, 0.45f, 0.45f,
-         1.0f, -1.0f, 0.0f,    0.25f, 0.25f, 0.25f,
-        -1.0f, -1.0f, 0.0f,    0.25f, 0.25f, 0.25f,
-        -1.0f,  0.0f, 0.0f,    0.45f, 0.45f, 0.45f
-    };
-
-    unsigned int groundVao, groundVbo, groundEbo;
-    makeMesh(groundVertices, sizeof(groundVertices), squareIndices, sizeof(squareIndices),
-             groundVao, groundVbo, groundEbo);
-
-    unsigned int shaderProgram = makeShader(vertexSrc, fragmentSrc);
-
-    int locOffset = glGetUniformLocation(shaderProgram, "uOffset");
-    int locScale  = glGetUniformLocation(shaderProgram, "uScale");
-    int locAspect = glGetUniformLocation(shaderProgram, "uAspect");
-    int locTint   = glGetUniformLocation(shaderProgram, "uTint");
-
-    float lastFrame = (float)glfwGetTime();
-    float simTime = 0.0f;
-
+    reset();
+    double last = glfwGetTime();
+    int lastKey = -1;
     while (!glfwWindowShouldClose(window)) {
-        float now = (float)glfwGetTime();
-        float dt = now - lastFrame;
-        lastFrame = now;
+        double now = glfwGetTime();
+        float dt = std::min(0.033f, (float)(now - last));
+        last = now;
 
-        processInput(window, dt);
+        bool down = glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS ||
+                    glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+        update(dt, down);
 
-        simTime += dt * speed;
-
-        float ballY = GROUND_Y + BALL_R + ballHeight(simTime);
-        float sqX = squareX(simTime);
-        float sqY = GROUND_Y + SQUARE_HALF;
-
-        bool touching = isTouching(BALL_X, ballY, sqX, sqY);
-        if (touching) {
-            std::cout << "Соқтығысу!\n";
+        int meters = (int)(dist / 10), key = meters * 2 + dead;
+        if (key != lastKey) {
+            lastKey = key;
+            char buf[128];
+            std::snprintf(buf, sizeof(buf), dead ? "GAME OVER - %d m | Best: %d m | SPACE to retry"
+                                                 : "STICK RUN | %d m | Best: %d m", meters, best);
+            glfwSetWindowTitle(window, buf);
         }
 
-        if (isWhiteBackground) {
-            glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        } else {
-            glClearColor(0.12f, 0.14f, 0.25f, 1.0f);
-        }
-
+        glClearColor(0.12f, 0.14f, 0.26f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-
-        glUseProgram(shaderProgram);
-        glUniform1f(locAspect, aspect);
-
-        glUniform3f(locTint, 1.0f, 1.0f, 1.0f);
-        glUniform2f(locOffset, 0.0f, GROUND_Y);
-        glUniform1f(locScale, 1.0f);
-        glBindVertexArray(groundVao);
-        glUniform1f(locAspect, 1.0f);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        glUniform1f(locAspect, aspect);
-
-        if (touching) {
-            glUniform3f(locTint, 1.0f, 0.2f, 0.2f);
-        }
-
-        glUniform2f(locOffset, sqX, sqY);
-        glBindVertexArray(squareVao);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-        glUniform2f(locOffset, BALL_X, ballY);
-        glBindVertexArray(circleVao);
-        glDrawElements(GL_TRIANGLES, (GLsizei)circleIndices.size(), GL_UNSIGNED_INT, 0);
-
+        drawScene();
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-
-    glDeleteVertexArrays(1, &circleVao);
-    glDeleteBuffers(1, &circleVbo);
-    glDeleteBuffers(1, &circleEbo);
-
-    glDeleteVertexArrays(1, &squareVao);
-    glDeleteBuffers(1, &squareVbo);
-    glDeleteBuffers(1, &squareEbo);
-
-    glDeleteVertexArrays(1, &groundVao);
-    glDeleteBuffers(1, &groundVbo);
-    glDeleteBuffers(1, &groundEbo);
-
-    glDeleteProgram(shaderProgram);
-
     glfwTerminate();
-    return 0;
 }
